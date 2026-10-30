@@ -108,6 +108,13 @@ class AppStore(private val settings: Settings) {
         save()
     }
 
+    /** Undoes delete(): re-adds a previously deleted habit and its check-ins. */
+    fun restore(h: Habit, log: Set<LocalDate>) {
+        habits = habits + h
+        logs = logs + (h.id to log)
+        save()
+    }
+
     fun wipe() {
         habits = emptyList(); logs = emptyMap(); demo = false; save()
     }
