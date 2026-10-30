@@ -1,8 +1,18 @@
 package com.dotday.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,16 +22,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import kotlin.math.roundToInt
 
 @Composable
 fun HabitsScreen(store: AppStore, ui: UiState, today: LocalDate) {
@@ -42,30 +58,101 @@ internal fun swipeOpenTarget(offsetPx: Float, maxOffsetPx: Float): Float =
     if (offsetPx <= -maxOffsetPx / 2f) -maxOffsetPx else 0f
 
 @Composable
-private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
-    Panel(Modifier.alpha(if (x.archived != null) .7f else 1f)) {
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Column(Modifier.padding(end = 10.dp)) {
+private fun HabitCardContent(x: Habit, onEdit: () -> Unit) {
+    Panel(Modifier.alpha(if (x.archived != null) .7f else 1f), gap = 0.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 10.dp)) {
                 T(x.name + if (x.archived != null) " (archived)" else "", 18.sp, FontWeight.Bold, lineHeight = 24.sp)
                 Meta("${x.category} · ${sched(x)}")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DButton("Edit", kind = BtnKind.Alt) { ui.editing = x.id }
-                DButton(if (x.archived != null) "Restore" else "Archive", kind = BtnKind.Alt) {
-                    val a = store.toggleArchive(x.id, today)
-                    ui.toast(if (a) "Archived. History is kept." else "Restored.")
+            Box(
+                Modifier.size(44.dp).clickable(role = Role.Button, onClick = onEdit),
+                contentAlignment = Alignment.Center,
+            ) { T("✎", 20.sp) }
+        }
+    }
+}
+
+@Composable
+private fun SwipeActionButton(emoji: String, label: String, bg: androidx.compose.ui.graphics.Color, width: Dp, onClick: () -> Unit) {
+    val c = LocalColors.current
+    Box(
+        Modifier.fillMaxHeight().width(width).comic(bg, c.ink, RoundedCornerShape(0.dp), 3.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            T(emoji, 20.sp)
+            T(label, 12.sp, FontWeight.Bold, androidx.compose.ui.graphics.Color.White)
+        }
+    }
+}
+
+@Composable
+private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
+    val density = LocalDensity.current
+    val c = LocalColors.current
+    val maxOffsetPx = with(density) { 160.dp.toPx() }
+    val offsetX = remember(x.id) { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var removed by remember(x.id) { mutableStateOf(false) }
+
+    LaunchedEffect(ui.swipedHabitId) {
+        if (ui.swipedHabitId != x.id && offsetX.value != 0f) offsetX.animateTo(0f, spring())
+    }
+    LaunchedEffect(removed) {
+        if (removed) {
+            delay(220)
+            val log = store.done(x.id)
+            store.delete(x.id)
+            ui.toast("Habit deleted.", SnackAction("Undo") { store.restore(x, log) })
+        }
+    }
+
+    AnimatedVisibility(
+        visible = !removed,
+        exit = shrinkVertically(tween(220)) + fadeOut(tween(220)),
+    ) {
+        Box(Modifier.fillMaxWidth().padding(bottom = 22.dp)) {
+            Row(Modifier.matchParentSize(), horizontalArrangement = Arrangement.End) {
+                SwipeActionButton("📦", if (x.archived != null) "Restore" else "Archive", c.blue, 80.dp) {
+                    scope.launch { offsetX.animateTo(0f, spring()) }
+                    ui.swipedHabitId = null
+                    val nowArchived = store.toggleArchive(x.id, today)
+                    ui.toast(
+                        if (nowArchived) "Archived. History is kept." else "Restored.",
+                        SnackAction("Undo") { store.toggleArchive(x.id, today) },
+                    )
                 }
-                DButton("Delete", kind = BtnKind.Bad) {
+                SwipeActionButton("🗑", "Delete", c.primary, 80.dp) {
+                    scope.launch { offsetX.animateTo(0f, spring()) }
+                    ui.swipedHabitId = null
                     ui.confirm = Confirm(
                         "Delete \"${x.name}\" and all its check-ins? This can't be undone. Archiving keeps history and is usually better.",
                         "Delete",
-                    ) { store.delete(x.id); ui.toast("Habit deleted.") }
+                    ) { removed = true }
                 }
             }
+            Box(
+                Modifier.fillMaxWidth()
+                    .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                    .draggable(
+                        orientation = Orientation.Horizontal,
+                        state = rememberDraggableState { delta ->
+                            scope.launch { offsetX.snapTo((offsetX.value + delta).coerceIn(-maxOffsetPx, 0f)) }
+                        },
+                        onDragStopped = {
+                            val target = swipeOpenTarget(offsetX.value, maxOffsetPx)
+                            scope.launch { offsetX.animateTo(target, spring()) }
+                            ui.swipedHabitId = if (target != 0f) x.id else null
+                        },
+                    )
+                    .clickable(
+                        enabled = ui.swipedHabitId != null && ui.swipedHabitId != x.id,
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { ui.swipedHabitId = null },
+            ) { HabitCardContent(x) { ui.editing = x.id } }
         }
     }
 }
