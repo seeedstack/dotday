@@ -37,6 +37,10 @@ fun HabitsScreen(store: AppStore, ui: UiState, today: LocalDate) {
     }
 }
 
+/** Where a dragged habit-row offset (<= 0, px) should snap to: open (-maxOffsetPx) past halfway, else closed (0). */
+internal fun swipeOpenTarget(offsetPx: Float, maxOffsetPx: Float): Float =
+    if (offsetPx <= -maxOffsetPx / 2f) -maxOffsetPx else 0f
+
 @Composable
 private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
     Panel(Modifier.alpha(if (x.archived != null) .7f else 1f)) {
