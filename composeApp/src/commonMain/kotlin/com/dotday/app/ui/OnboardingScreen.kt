@@ -4,9 +4,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -14,7 +17,9 @@ import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.ActivityLevel
 import com.dotday.app.domain.Copy
+import com.dotday.app.domain.Focus
 import com.dotday.app.domain.Gender
+import com.dotday.app.domain.STARTER_HABITS
 import com.dotday.app.domain.StepValidationArgs
 import com.dotday.app.domain.UnitSystem
 import com.dotday.app.domain.cmToFtIn
@@ -24,6 +29,16 @@ import com.dotday.app.domain.kgToLb
 import com.dotday.app.domain.lbToKg
 import com.dotday.app.domain.maxBirthYear
 import com.dotday.app.domain.minBirthYear
+import com.dotday.app.domain.toggleStarterHabit
+import com.dotday.app.resources.Res
+import com.dotday.app.resources.ic_focus_book
+import com.dotday.app.resources.ic_focus_finance
+import com.dotday.app.resources.ic_focus_groceries
+import com.dotday.app.resources.ic_focus_gym
+import com.dotday.app.resources.ic_focus_movie
+import com.dotday.app.resources.ic_focus_recipes
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
@@ -56,6 +71,8 @@ fun OnboardingScreen(store: AppStore, ui: UiState) {
                     4 -> BodyStatsStep(state)
                     5 -> ActivityLevelStep(state)
                     6 -> RoutineStep(state)
+                    7 -> FocusStep(state)
+                    8 -> StarterHabitsStep(state)
                     else -> {}
                 }
             }
@@ -167,6 +184,54 @@ private fun RoutineStep(state: OnboardingState) {
         FieldLabel("Remind me at")
         TimeWheelPicker(state.reminderTime, { state.reminderTime = it })
         if (state.wakeTime == state.sleepTime) ErrText("Wake and sleep times should differ.")
+    }
+}
+
+private val FOCUS_ICONS: Map<Focus, DrawableResource> = mapOf(
+    Focus.GYM to Res.drawable.ic_focus_gym,
+    Focus.MOVIE to Res.drawable.ic_focus_movie,
+    Focus.BOOK to Res.drawable.ic_focus_book,
+    Focus.FINANCE to Res.drawable.ic_focus_finance,
+    Focus.GROCERIES to Res.drawable.ic_focus_groceries,
+    Focus.RECIPES to Res.drawable.ic_focus_recipes,
+)
+
+@Composable
+private fun FocusStep(state: OnboardingState) {
+    Column {
+        H2(Copy.OB_FOCUS_TITLE)
+        TilePicker(
+            Focus.entries, state.focus ?: Focus.entries.first(),
+            { f ->
+                state.focus = f
+                state.selectedHabitNames = STARTER_HABITS.getValue(f).toSet()
+            },
+            Modifier.padding(top = 8.dp),
+        ) { f, _ ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                FOCUS_ICONS[f]?.let { Image(painterResource(it), contentDescription = f.label, modifier = Modifier.size(32.dp)) }
+                T(
+                    f.label,
+                    weight = if (state.focus == f) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StarterHabitsStep(state: OnboardingState) {
+    val focus = state.focus ?: Focus.GYM
+    Column {
+        H2(Copy.OB_STARTER_TITLE)
+        STARTER_HABITS.getValue(focus).forEach { name ->
+            val on = state.selectedHabitNames.contains(name)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                    .clickable { state.selectedHabitNames = toggleStarterHabit(state.selectedHabitNames, name) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) { Check(on); Spacer(Modifier.width(8.dp)); T(name) }
+        }
     }
 }
 
