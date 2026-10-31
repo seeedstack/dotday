@@ -57,4 +57,81 @@ class ProfileTest {
             assertTrue(names.size in 3..5, "Focus $f has ${names.size} starter habits")
         }
     }
+
+    @Test fun toggleStarterHabitRefusesToDropTheLastSelected() {
+        assertEquals(setOf("Hit the gym"), toggleStarterHabit(setOf("Hit the gym"), "Hit the gym"))
+    }
+
+    @Test fun toggleStarterHabitRemovesWhenMoreThanOneSelected() {
+        assertEquals(setOf("A"), toggleStarterHabit(setOf("A", "B"), "B"))
+    }
+
+    @Test fun toggleStarterHabitAddsWhenAbsent() {
+        assertEquals(setOf("A", "B"), toggleStarterHabit(setOf("A"), "B"))
+    }
+
+    private val validArgs = StepValidationArgs(
+        name = "Ada", birthYear = 2000, currentYear = 2026, gender = Gender.FEMALE,
+        heightCm = 170f, weightKg = 65f, activityLevel = ActivityLevel.MODERATE,
+        wakeTime = kotlinx.datetime.LocalTime(7, 0), sleepTime = kotlinx.datetime.LocalTime(23, 0),
+        focus = Focus.GYM, selectedHabitNames = setOf("Hit the gym"), avatarId = "avatar_01",
+        notificationRequested = true,
+    )
+
+    @Test fun isStepValidNameStepRejectsEmptyAcceptsNonEmpty() {
+        assertFalse(isStepValid(1, validArgs.copy(name = "")))
+        assertTrue(isStepValid(1, validArgs.copy(name = "Ada")))
+    }
+
+    @Test fun isStepValidBirthYearStepRejectsOutOfRange() {
+        assertFalse(isStepValid(2, validArgs.copy(birthYear = 1800)))
+        assertTrue(isStepValid(2, validArgs.copy(birthYear = 2000)))
+    }
+
+    @Test fun isStepValidGenderStepRequiresASelection() {
+        assertFalse(isStepValid(3, validArgs.copy(gender = null)))
+        assertTrue(isStepValid(3, validArgs.copy(gender = Gender.MALE)))
+    }
+
+    @Test fun isStepValidBodyStatsStepRejectsOutOfRangeHeightOrWeight() {
+        assertFalse(isStepValid(4, validArgs.copy(heightCm = 50f)))
+        assertFalse(isStepValid(4, validArgs.copy(weightKg = 10f)))
+        assertTrue(isStepValid(4, validArgs))
+    }
+
+    @Test fun isStepValidActivityStepRequiresASelection() {
+        assertFalse(isStepValid(5, validArgs.copy(activityLevel = null)))
+        assertTrue(isStepValid(5, validArgs.copy(activityLevel = ActivityLevel.LIGHT)))
+    }
+
+    @Test fun isStepValidRoutineStepRejectsEqualWakeAndSleep() {
+        val t = kotlinx.datetime.LocalTime(7, 0)
+        assertFalse(isStepValid(6, validArgs.copy(wakeTime = t, sleepTime = t)))
+        assertTrue(isStepValid(6, validArgs))
+    }
+
+    @Test fun isStepValidFocusStepRequiresASelection() {
+        assertFalse(isStepValid(7, validArgs.copy(focus = null)))
+        assertTrue(isStepValid(7, validArgs.copy(focus = Focus.BOOK)))
+    }
+
+    @Test fun isStepValidStarterHabitsStepRequiresAtLeastOne() {
+        assertFalse(isStepValid(8, validArgs.copy(selectedHabitNames = emptySet())))
+        assertTrue(isStepValid(8, validArgs))
+    }
+
+    @Test fun isStepValidAvatarStepRequiresASelection() {
+        assertFalse(isStepValid(9, validArgs.copy(avatarId = null)))
+        assertTrue(isStepValid(9, validArgs.copy(avatarId = "avatar_02")))
+    }
+
+    @Test fun isStepValidNotificationsStepRequiresTheRequestToHaveBeenMade() {
+        assertFalse(isStepValid(10, validArgs.copy(notificationRequested = false)))
+        assertTrue(isStepValid(10, validArgs))
+    }
+
+    @Test fun isStepValidWelcomeAndDoneStepsAreAlwaysValid() {
+        assertTrue(isStepValid(0, validArgs))
+        assertTrue(isStepValid(11, validArgs))
+    }
 }

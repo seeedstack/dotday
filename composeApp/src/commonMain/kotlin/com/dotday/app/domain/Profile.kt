@@ -83,3 +83,46 @@ fun isValidName(s: String): Boolean = s.trim().length in 1..24
 fun isValidHeightCm(cm: Float): Boolean = cm in 100f..250f
 fun isValidWeightKg(kg: Float): Boolean = kg in 30f..300f
 fun isValidSchedule(wake: LocalTime, sleep: LocalTime): Boolean = wake != sleep
+
+/** Toggles [name] in [selected]; refuses to drop the last remaining habit. */
+fun toggleStarterHabit(selected: Set<String>, name: String): Set<String> =
+    if (selected.contains(name)) {
+        if (selected.size > 1) selected - name else selected
+    } else {
+        selected + name
+    }
+
+/** Every field `isStepValid` needs across the 12 onboarding steps, bundled so call sites read as one value. */
+data class StepValidationArgs(
+    val name: String,
+    val birthYear: Int,
+    val currentYear: Int,
+    val gender: Gender?,
+    val heightCm: Float,
+    val weightKg: Float,
+    val activityLevel: ActivityLevel?,
+    val wakeTime: LocalTime,
+    val sleepTime: LocalTime,
+    val focus: Focus?,
+    val selectedHabitNames: Set<String>,
+    val avatarId: String?,
+    val notificationRequested: Boolean,
+)
+
+/** Step indices: 0 Welcome, 1 Name, 2 BirthYear, 3 Gender, 4 BodyStats, 5 Activity, 6 Routine,
+ *  7 Focus, 8 StarterHabits, 9 Avatar, 10 Notifications, 11 Done. */
+fun isStepValid(step: Int, a: StepValidationArgs): Boolean = when (step) {
+    0 -> true
+    1 -> isValidName(a.name)
+    2 -> a.birthYear in minBirthYear(a.currentYear)..maxBirthYear(a.currentYear)
+    3 -> a.gender != null
+    4 -> isValidHeightCm(a.heightCm) && isValidWeightKg(a.weightKg)
+    5 -> a.activityLevel != null
+    6 -> isValidSchedule(a.wakeTime, a.sleepTime)
+    7 -> a.focus != null
+    8 -> a.selectedHabitNames.isNotEmpty()
+    9 -> a.avatarId != null
+    10 -> a.notificationRequested
+    11 -> true
+    else -> false
+}
