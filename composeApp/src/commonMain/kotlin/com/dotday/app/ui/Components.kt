@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -133,14 +134,14 @@ fun Panel(
 enum class BtnKind { Primary, Alt, Bad }
 
 @Composable
-fun DButton(text: String, modifier: Modifier = Modifier, kind: BtnKind = BtnKind.Primary, onClick: () -> Unit) {
+fun DButton(text: String, modifier: Modifier = Modifier, kind: BtnKind = BtnKind.Primary, enabled: Boolean = true, onClick: () -> Unit) {
     val c = LocalColors.current
     val bg = when (kind) { BtnKind.Primary -> c.yellow; BtnKind.Alt -> c.card; BtnKind.Bad -> c.primary }
     val fg = when (kind) { BtnKind.Primary -> Ink111; BtnKind.Alt -> c.ink; BtnKind.Bad -> Color.White }
     Box(
-        modifier.heightIn(min = 44.dp)
+        modifier.heightIn(min = 44.dp).alpha(if (enabled) 1f else 0.4f)
             .comic(bg, c.ink, BtnShape, 3.dp)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) { T(text, 15.sp, FontWeight.Bold, fg) }
