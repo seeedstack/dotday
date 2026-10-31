@@ -4,13 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,7 +16,12 @@ import com.dotday.app.domain.ActivityLevel
 import com.dotday.app.domain.Copy
 import com.dotday.app.domain.Gender
 import com.dotday.app.domain.StepValidationArgs
+import com.dotday.app.domain.UnitSystem
+import com.dotday.app.domain.cmToFtIn
+import com.dotday.app.domain.ftInToCm
 import com.dotday.app.domain.isStepValid
+import com.dotday.app.domain.kgToLb
+import com.dotday.app.domain.lbToKg
 import com.dotday.app.domain.maxBirthYear
 import com.dotday.app.domain.minBirthYear
 import kotlinx.datetime.Clock
@@ -54,6 +53,9 @@ fun OnboardingScreen(store: AppStore, ui: UiState) {
                     1 -> NameStep(state)
                     2 -> BirthYearStep(state, currentYear)
                     3 -> GenderStep(state)
+                    4 -> BodyStatsStep(state)
+                    5 -> ActivityLevelStep(state)
+                    6 -> RoutineStep(state)
                     else -> {}
                 }
             }
@@ -95,6 +97,76 @@ private fun BirthYearStep(state: OnboardingState, currentYear: Int) {
             { state.birthYear = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Meta("Age: ${currentYear - state.birthYear}", Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun BodyStatsStep(state: OnboardingState) {
+    Column {
+        H2(Copy.OB_BODYSTATS_TITLE)
+        TilePicker(
+            UnitSystem.entries, state.unitSystem, { state.unitSystem = it },
+            Modifier.padding(top = 8.dp, bottom = 8.dp),
+        ) { u, _ ->
+            T(
+                if (u == UnitSystem.METRIC) "Metric (cm/kg)" else "Imperial (ft/lb)",
+                weight = if (state.unitSystem == u) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+            )
+        }
+
+        FieldLabel("Height")
+        if (state.unitSystem == UnitSystem.METRIC) {
+            WheelPicker(100..250, state.heightCm.toInt(), { state.heightCm = it.toFloat() }, Modifier.fillMaxWidth()) { "$it cm" }
+        } else {
+            val (ft, inch) = cmToFtIn(state.heightCm)
+            Row {
+                WheelPicker(3..8, ft, { newFt -> state.heightCm = ftInToCm(newFt, inch) }, Modifier.weight(1f)) { "$it ft" }
+                WheelPicker(
+                    0..11, inch.toInt().coerceIn(0, 11),
+                    { newIn -> state.heightCm = ftInToCm(ft, newIn.toFloat()) }, Modifier.weight(1f),
+                ) { "$it in" }
+            }
+        }
+
+        FieldLabel("Weight")
+        if (state.unitSystem == UnitSystem.METRIC) {
+            WheelPicker(30..300, state.weightKg.toInt(), { state.weightKg = it.toFloat() }, Modifier.fillMaxWidth()) { "$it kg" }
+        } else {
+            WheelPicker(
+                66..660, kgToLb(state.weightKg).toInt(),
+                { lb -> state.weightKg = lbToKg(lb.toFloat()) }, Modifier.fillMaxWidth(),
+            ) { "$it lb" }
+        }
+    }
+}
+
+@Composable
+private fun ActivityLevelStep(state: OnboardingState) {
+    Column {
+        H2(Copy.OB_ACTIVITY_TITLE)
+        TilePicker(
+            ActivityLevel.entries, state.activityLevel ?: ActivityLevel.entries.first(), { state.activityLevel = it },
+            Modifier.padding(top = 8.dp),
+        ) { lvl, _ ->
+            T(
+                Copy.ACTIVITY_COPY.getValue(lvl.name),
+                weight = if (state.activityLevel == lvl) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoutineStep(state: OnboardingState) {
+    Column {
+        H2(Copy.OB_ROUTINE_TITLE)
+        FieldLabel("Wake up")
+        TimeWheelPicker(state.wakeTime, { state.wakeTime = it })
+        FieldLabel("Sleep")
+        TimeWheelPicker(state.sleepTime, { state.sleepTime = it })
+        FieldLabel("Remind me at")
+        TimeWheelPicker(state.reminderTime, { state.reminderTime = it })
+        if (state.wakeTime == state.sleepTime) ErrText("Wake and sleep times should differ.")
     }
 }
 
