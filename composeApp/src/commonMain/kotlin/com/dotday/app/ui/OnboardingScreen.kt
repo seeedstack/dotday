@@ -5,20 +5,28 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.ActivityLevel
+import com.dotday.app.domain.AVATARS
 import com.dotday.app.domain.Copy
 import com.dotday.app.domain.Focus
 import com.dotday.app.domain.Gender
+import com.dotday.app.domain.Habit
+import com.dotday.app.domain.PAL
 import com.dotday.app.domain.STARTER_HABITS
 import com.dotday.app.domain.StepValidationArgs
 import com.dotday.app.domain.UnitSystem
@@ -30,6 +38,8 @@ import com.dotday.app.domain.lbToKg
 import com.dotday.app.domain.maxBirthYear
 import com.dotday.app.domain.minBirthYear
 import com.dotday.app.domain.toggleStarterHabit
+import com.dotday.app.platform.rememberNotificationPermissionRequester
+import com.dotday.app.platform.scheduleDailyReminder
 import com.dotday.app.resources.Res
 import com.dotday.app.resources.ic_focus_book
 import com.dotday.app.resources.ic_focus_finance
@@ -52,7 +62,7 @@ fun OnboardingScreen(store: AppStore, ui: UiState) {
         heightCm = state.heightCm, weightKg = state.weightKg, activityLevel = state.activityLevel,
         wakeTime = state.wakeTime, sleepTime = state.sleepTime, focus = state.focus,
         selectedHabitNames = state.selectedHabitNames, avatarId = state.avatarId,
-        notificationRequested = state.notificationsGranted,
+        notificationRequested = state.notificationsRequested,
     )
     val valid = isStepValid(state.step, args)
 
@@ -73,15 +83,20 @@ fun OnboardingScreen(store: AppStore, ui: UiState) {
                     6 -> RoutineStep(state)
                     7 -> FocusStep(state)
                     8 -> StarterHabitsStep(state)
+                    9 -> AvatarThemeStep(state)
+                    10 -> NotificationsStep(state)
+                    11 -> DoneStep(store, ui, state)
                     else -> {}
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            if (state.step > 0) DButton("Back", kind = BtnKind.Alt) { state.back() } else Spacer(Modifier.width(1.dp))
-            when (state.step) {
-                0 -> DButton(Copy.OB_WELCOME_CTA) { state.next() }
-                else -> DButton("NEXT!", enabled = valid) { state.next() }
+        if (state.step < ONBOARDING_STEP_COUNT - 1) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                if (state.step > 0) DButton("Back", kind = BtnKind.Alt) { state.back() } else Spacer(Modifier.width(1.dp))
+                when (state.step) {
+                    0 -> DButton(Copy.OB_WELCOME_CTA) { state.next() }
+                    else -> DButton("NEXT!", enabled = valid) { state.next() }
+                }
             }
         }
     }
@@ -231,6 +246,78 @@ private fun StarterHabitsStep(state: OnboardingState) {
                     .clickable { state.selectedHabitNames = toggleStarterHabit(state.selectedHabitNames, name) },
                 verticalAlignment = Alignment.CenterVertically,
             ) { Check(on); Spacer(Modifier.width(8.dp)); T(name) }
+        }
+    }
+}
+
+@Composable
+private fun AvatarThemeStep(state: OnboardingState) {
+    val c = LocalColors.current
+    val selectedAvatar = AVATARS.firstOrNull { it.id == state.avatarId } ?: AVATARS.first()
+    val selectedAccent = state.accentHex ?: PAL.first().first
+    Column {
+        H2(Copy.OB_AVATAR_TITLE)
+        FieldLabel("Avatar")
+        TilePicker(AVATARS, selectedAvatar, { state.avatarId = it.id }) { a, _ ->
+            Image(painterResource(a.drawable), contentDescription = a.id, modifier = Modifier.size(40.dp))
+        }
+        FieldLabel("Accent color")
+        TilePicker(PAL, PAL.first { it.first == selectedAccent }, { state.accentHex = it.first }) { (hexStr, name), _ ->
+            Box(
+                Modifier.size(32.dp).background(hex(hexStr), CircleShape).border(2.dp, c.ink, CircleShape)
+                    .semantics { contentDescription = name },
+            )
+        }
+        FieldLabel("Preview")
+        Panel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).background(hex(selectedAccent), CircleShape).border(3.dp, c.ink, CircleShape))
+                Spacer(Modifier.width(12.dp))
+                T(state.name.ifEmpty { "Your habit" }, weight = androidx.compose.ui.text.font.FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationsStep(state: OnboardingState) {
+    val requestPermission = rememberNotificationPermissionRequester()
+    Column {
+        H2(Copy.OB_NOTIFY_TITLE)
+        T(
+            Copy.reminderExplainer(state.reminderTime.toString().take(5)),
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        DButton(if (state.notificationsRequested) "Done ✓" else "Allow reminders", enabled = !state.notificationsRequested) {
+            requestPermission { granted ->
+                state.notificationsGranted = granted
+                state.notificationsRequested = true
+            }
+        }
+        if (state.notificationsRequested && !state.notificationsGranted) Meta(Copy.OB_NOTIFY_DENIED, Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun DoneStep(store: AppStore, ui: UiState, state: OnboardingState) {
+    val focus = state.focus ?: Focus.GYM
+    Column {
+        H2(Copy.OB_DONE_TITLE.replace("{name}", state.name.ifEmpty { "friend" }))
+        T("Focus: ${focus.label}", modifier = Modifier.padding(top = 8.dp))
+        T("${state.selectedHabitNames.size} habits ready to go.")
+        DButton(Copy.OB_DONE_CTA, modifier = Modifier.padding(top = 16.dp)) {
+            val profile = state.toProfile(state.notificationsGranted)
+            if (state.notificationsGranted) scheduleDailyReminder(profile.reminderTime.hour, profile.reminderTime.minute)
+            val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
+            val habits = state.selectedHabitNames.map { name ->
+                Habit(
+                    id = "h" + Clock.System.now().toEpochMilliseconds().toString(36) + name.hashCode().toString(36),
+                    name = name, category = profile.focus.label, color = profile.accentHex,
+                    days = (0..6).toList(), start = today,
+                )
+            }
+            store.completeOnboarding(profile, habits)
+            ui.fireBurst(Copy.ALL)
         }
     }
 }

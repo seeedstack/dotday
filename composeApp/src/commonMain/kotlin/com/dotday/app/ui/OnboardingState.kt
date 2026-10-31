@@ -34,6 +34,7 @@ class OnboardingState {
     var selectedHabitNames by mutableStateOf<Set<String>>(emptySet())
     var avatarId by mutableStateOf<String?>(null)
     var accentHex by mutableStateOf<String?>(null)
+    var notificationsRequested by mutableStateOf(false)
     var notificationsGranted by mutableStateOf(false)
 
     fun next() { step = (step + 1).coerceAtMost(ONBOARDING_STEP_COUNT - 1) }
