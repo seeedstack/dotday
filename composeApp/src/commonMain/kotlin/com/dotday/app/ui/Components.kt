@@ -255,6 +255,8 @@ fun WheelPicker(
     val initialIndex = (value - range.first).coerceIn(0, values.lastIndex)
     val listState = rememberLazyListState(initialIndex)
     val flingBehavior = rememberSnapFlingBehavior(listState)
+    val currentValue by rememberUpdatedState(value)
+    val currentOnChange by rememberUpdatedState(onChange)
 
     LaunchedEffect(listState) {
         snapshotFlow { Triple(listState.isScrollInProgress, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
@@ -263,7 +265,7 @@ fun WheelPicker(
                     val half = with(density) { (WheelRowHeight / 2).toPx() }
                     val centered = (firstIndex + if (offset > half) 1 else 0).coerceIn(0, values.lastIndex)
                     val v = values[centered]
-                    if (v != value) onChange(v)
+                    if (v != currentValue) currentOnChange(v)
                 }
             }
     }

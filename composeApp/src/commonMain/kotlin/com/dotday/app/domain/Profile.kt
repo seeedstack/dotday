@@ -84,6 +84,12 @@ fun isValidHeightCm(cm: Float): Boolean = cm in 100f..250f
 fun isValidWeightKg(kg: Float): Boolean = kg in 30f..300f
 fun isValidSchedule(wake: LocalTime, sleep: LocalTime): Boolean = wake != sleep
 
+/** Keeps an imperial-to-metric conversion inside the valid height range (e.g. 3ft rounds under 100cm). */
+fun clampHeightCm(cm: Float): Float = cm.coerceIn(100f, 250f)
+
+/** Keeps an imperial-to-metric conversion inside the valid weight range (e.g. 66lb rounds under 30kg). */
+fun clampWeightKg(kg: Float): Float = kg.coerceIn(30f, 300f)
+
 /** Toggles [name] in [selected]; refuses to drop the last remaining habit. */
 fun toggleStarterHabit(selected: Set<String>, name: String): Set<String> =
     if (selected.contains(name)) {

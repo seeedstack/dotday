@@ -134,4 +134,22 @@ class ProfileTest {
         assertTrue(isStepValid(0, validArgs))
         assertTrue(isStepValid(11, validArgs))
     }
+
+    @Test fun clampHeightCmKeepsLowestImperialWheelValueInRange() {
+        // 3 ft 0 in converts to under 100cm; the UI must not be able to produce an invalid height.
+        assertEquals(100f, clampHeightCm(ftInToCm(3, 0f)))
+    }
+
+    @Test fun clampHeightCmLeavesAnInRangeValueUnchanged() {
+        assertEquals(170f, clampHeightCm(170f))
+    }
+
+    @Test fun clampWeightKgKeepsLowestImperialWheelValueInRange() {
+        // 66 lb converts to under 30kg; the UI must not be able to produce an invalid weight.
+        assertEquals(30f, clampWeightKg(lbToKg(66f)))
+    }
+
+    @Test fun clampWeightKgLeavesAnInRangeValueUnchanged() {
+        assertEquals(65f, clampWeightKg(65f))
+    }
 }

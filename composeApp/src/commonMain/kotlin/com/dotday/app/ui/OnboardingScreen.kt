@@ -30,6 +30,8 @@ import com.dotday.app.domain.PAL
 import com.dotday.app.domain.STARTER_HABITS
 import com.dotday.app.domain.StepValidationArgs
 import com.dotday.app.domain.UnitSystem
+import com.dotday.app.domain.clampHeightCm
+import com.dotday.app.domain.clampWeightKg
 import com.dotday.app.domain.cmToFtIn
 import com.dotday.app.domain.ftInToCm
 import com.dotday.app.domain.isStepValid
@@ -152,10 +154,10 @@ private fun BodyStatsStep(state: OnboardingState) {
         } else {
             val (ft, inch) = cmToFtIn(state.heightCm)
             Row {
-                WheelPicker(3..8, ft, { newFt -> state.heightCm = ftInToCm(newFt, inch) }, Modifier.weight(1f)) { "$it ft" }
+                WheelPicker(3..8, ft, { newFt -> state.heightCm = clampHeightCm(ftInToCm(newFt, inch)) }, Modifier.weight(1f)) { "$it ft" }
                 WheelPicker(
                     0..11, inch.toInt().coerceIn(0, 11),
-                    { newIn -> state.heightCm = ftInToCm(ft, newIn.toFloat()) }, Modifier.weight(1f),
+                    { newIn -> state.heightCm = clampHeightCm(ftInToCm(ft, newIn.toFloat())) }, Modifier.weight(1f),
                 ) { "$it in" }
             }
         }
@@ -166,7 +168,7 @@ private fun BodyStatsStep(state: OnboardingState) {
         } else {
             WheelPicker(
                 66..660, kgToLb(state.weightKg).toInt(),
-                { lb -> state.weightKg = lbToKg(lb.toFloat()) }, Modifier.fillMaxWidth(),
+                { lb -> state.weightKg = clampWeightKg(lbToKg(lb.toFloat())) }, Modifier.fillMaxWidth(),
             ) { "$it lb" }
         }
     }

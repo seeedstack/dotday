@@ -26,6 +26,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
+import com.dotday.app.platform.scheduleDailyReminder
 import com.dotday.app.sdk.AddonTheme
 import com.dotday.app.sdk.activeTheme
 import com.dotday.app.sdk.passesContrast
@@ -51,6 +52,11 @@ fun App() {
     var today by remember { mutableStateOf(currentDate()) }
     // refresh at local midnight
     LaunchedEffect(Unit) { while (true) { delay(30_000); val n = currentDate(); if (n != today) today = n } }
+    // re-arm the daily reminder on every app start: Android alarms don't survive a reboot/force-stop,
+    // and the Desktop scheduler only lives for the process that started it.
+    LaunchedEffect(Unit) {
+        store.profile?.takeIf { it.notificationsGranted }?.let { scheduleDailyReminder(it.reminderTime.hour, it.reminderTime.minute) }
+    }
 
     val dark = when (store.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     val addonTheme = store.addons.activeTheme()
