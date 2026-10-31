@@ -4,7 +4,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -17,11 +21,15 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
+import kotlinx.datetime.LocalTime
 import kotlin.math.roundToInt
 
 val PanelShape = RoundedCornerShape(topStart = 6.dp, topEnd = 14.dp, bottomEnd = 8.dp, bottomStart = 12.dp)
@@ -223,6 +231,117 @@ fun SelectField(options: List<Pair<String, String>>, value: String, onChange: (S
                     }
                 }
             }
+        }
+    }
+}
+
+/* ---------- Onboarding wheel/tile pickers ---------- */
+private val WheelRowHeight = 44.dp
+private const val WheelVisibleRows = 5
+
+/** Snapping vertical wheel over an int range; the centered row is the value. */
+@Composable
+fun WheelPicker(
+    range: IntRange,
+    value: Int,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    format: (Int) -> String = { it.toString() },
+) {
+    val c = LocalColors.current
+    val density = LocalDensity.current
+    val values = remember(range) { range.toList() }
+    val initialIndex = (value - range.first).coerceIn(0, values.lastIndex)
+    val listState = rememberLazyListState(initialIndex)
+    val flingBehavior = rememberSnapFlingBehavior(listState)
+
+    LaunchedEffect(listState) {
+        snapshotFlow { Triple(listState.isScrollInProgress, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) }
+            .collect { (scrolling, firstIndex, offset) ->
+                if (!scrolling) {
+                    val half = with(density) { (WheelRowHeight / 2).toPx() }
+                    val centered = (firstIndex + if (offset > half) 1 else 0).coerceIn(0, values.lastIndex)
+                    val v = values[centered]
+                    if (v != value) onChange(v)
+                }
+            }
+    }
+
+    Box(modifier.height(WheelRowHeight * WheelVisibleRows), contentAlignment = Alignment.Center) {
+        LazyColumn(
+            state = listState,
+            flingBehavior = flingBehavior,
+            contentPadding = PaddingValues(vertical = WheelRowHeight * (WheelVisibleRows / 2)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(values.size) { i ->
+                val n = values[i]
+                Box(Modifier.fillMaxWidth().height(WheelRowHeight), contentAlignment = Alignment.Center) {
+                    T(format(n), 18.sp, if (n == value) FontWeight.Bold else FontWeight.Normal, if (n == value) c.ink else c.muted)
+                }
+            }
+        }
+        Box(
+            Modifier.align(Alignment.Center).fillMaxWidth().height(WheelRowHeight)
+                .border(2.dp, c.ink, RoundedCornerShape(8.dp)),
+        )
+    }
+}
+
+/** Two synced [WheelPicker]s (hour 0-23, minute in 5-minute steps) rendered as "HH : MM". */
+@Composable
+fun TimeWheelPicker(time: LocalTime, onChange: (LocalTime) -> Unit, modifier: Modifier = Modifier) {
+    val minuteBucket = time.minute / 5
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        WheelPicker(
+            0..23, time.hour, { onChange(LocalTime(it, time.minute)) },
+            Modifier.weight(1f),
+        ) { it.toString().padStart(2, '0') }
+        T(":", 20.sp, FontWeight.Bold)
+        WheelPicker(
+            0..11, minuteBucket, { onChange(LocalTime(time.hour, it * 5)) },
+            Modifier.weight(1f),
+        ) { (it * 5).toString().padStart(2, '0') }
+    }
+}
+
+/** A grid of comic-bordered tiles; exactly one of [options] is selected at a time. */
+@Composable
+fun <T> TilePicker(
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (T, Boolean) -> Unit,
+) {
+    val c = LocalColors.current
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { opt ->
+            val sel = opt == selected
+            Box(
+                Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
+                    .comic(if (sel) c.yellow else c.card, c.ink, RoundedCornerShape(8.dp), if (sel) 3.dp else 2.dp)
+                    .clickable(role = Role.RadioButton) { onSelect(opt) }
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center,
+            ) { content(opt, sel) }
+        }
+    }
+}
+
+/** Progress indicator for a multi-step flow, styled as comic panel dots. */
+@Composable
+fun ProgressDots(step: Int, total: Int, modifier: Modifier = Modifier) {
+    val c = LocalColors.current
+    Row(
+        modifier.semantics { contentDescription = "Panel ${step + 1} of $total" },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        repeat(total) { i ->
+            Box(
+                Modifier.size(if (i == step) 12.dp else 8.dp)
+                    .background(if (i == step) c.primary else c.muted, CircleShape),
+            )
         }
     }
 }
