@@ -100,6 +100,35 @@ object Copy {
     const val ALL = "LEVEL UP!"
     const val STREAK = ""
     const val STAMP = "DONE"
+
+    // Onboarding
+    const val OB_WELCOME_TITLE = "DOTDAY"
+    const val OB_WELCOME_SUB = "Your comic-strip habit tracker."
+    const val OB_WELCOME_CTA = "LET'S GO!"
+    const val OB_NAME_TITLE = "WHO'S OUR HERO?"
+    const val OB_NAME_SUB = "What should we call you?"
+    const val OB_BIRTHYEAR_TITLE = "WHEN'D YOU START THIS STORY?"
+    const val OB_GENDER_TITLE = "HOW DO YOU ROLL?"
+    const val OB_BODYSTATS_TITLE = "VITAL STATS, HERO."
+    const val OB_ACTIVITY_TITLE = "WHAT'S YOUR POWER LEVEL?"
+    const val OB_ROUTINE_TITLE = "YOUR DAILY RHYTHM."
+    const val OB_FOCUS_TITLE = "PICK YOUR QUEST."
+    const val OB_STARTER_TITLE = "YOUR STARTING MOVES."
+    const val OB_AVATAR_TITLE = "SUIT UP!"
+    const val OB_NOTIFY_TITLE = "DON'T MISS A PANEL."
+    const val OB_DONE_TITLE = "READY, {name}!"
+    const val OB_DONE_CTA = "START!"
+    const val OB_NOTIFY_DENIED = "No worries — you can turn reminders on later in Settings."
+
+    val ACTIVITY_COPY = mapOf(
+        "COUCH_POTATO" to "Couch Potato — resting between arcs.",
+        "LIGHT" to "Light — a few panels a week.",
+        "MODERATE" to "Moderate — steady page-turner.",
+        "VERY_ACTIVE" to "Very Active — action sequence every day.",
+        "BEAST_MODE" to "Beast Mode — main character energy.",
+    )
+
+    fun reminderExplainer(time: String) = "We'll ping you at $time."
 }
 
 val CATS: List<String> = listOf("Health", "Fitness", "Mindfulness")
