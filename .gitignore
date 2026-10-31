@@ -42,3 +42,6 @@ local.properties
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+ABOUT.md
+images/

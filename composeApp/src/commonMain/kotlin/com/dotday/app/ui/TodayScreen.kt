@@ -3,6 +3,7 @@ package com.dotday.app.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,8 +38,20 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
+import com.dotday.app.resources.Res
+import com.dotday.app.resources.ic_fitness
+import com.dotday.app.resources.ic_health
+import com.dotday.app.resources.ic_mindfulness
 import com.dotday.app.sdk.activeDashboardCards
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
+
+private val CAT_ICONS: Map<String, DrawableResource> = mapOf(
+    "Health" to Res.drawable.ic_health,
+    "Fitness" to Res.drawable.ic_fitness,
+    "Mindfulness" to Res.drawable.ic_mindfulness,
+)
 
 @Composable
 fun EmptyPanel(store: AppStore, ui: UiState, today: LocalDate) {
@@ -152,7 +165,14 @@ private fun HabitCard(h: Habit, today: LocalDate, done: Set<LocalDate>, stampAni
                 Box(
                     Modifier.size(44.dp).background(hc, CircleShape).border(3.dp, c.ink, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { T(CATS[h.category] ?: "●", 22.sp, color = Ink111, lineHeight = 24.sp) }
+                ) {
+                    val icon = CAT_ICONS[h.category]
+                    if (icon != null) {
+                        Image(painterResource(icon), contentDescription = h.category, modifier = Modifier.size(22.dp))
+                    } else {
+                        T("●", 22.sp, color = Ink111, lineHeight = 24.sp)
+                    }
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(
                     Modifier.weight(1f)

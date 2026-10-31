@@ -102,10 +102,7 @@ object Copy {
     const val STAMP = "DONE"
 }
 
-val CATS: Map<String, String> = linkedMapOf(
-    "Health" to "♥", "Fitness" to "⚡", "Learning" to "✎",
-    "Work" to "▣", "Mindfulness" to "☯", "Personal" to "★",
-)
+val CATS: List<String> = listOf("Health", "Fitness", "Mindfulness")
 val PAL = listOf(
     "#E63946" to "Red", "#FFD23F" to "Yellow", "#1D4ED8" to "Blue",
     "#7FD8BE" to "Mint", "#9B5DE5" to "Purple", "#FF8C42" to "Orange",

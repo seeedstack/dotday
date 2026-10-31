@@ -6,6 +6,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,28 +16,40 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
+import com.dotday.app.resources.Res
+import com.dotday.app.resources.ic_edit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.painterResource
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -53,9 +66,32 @@ fun HabitsScreen(store: AppStore, ui: UiState, today: LocalDate) {
     }
 }
 
-/** Where a dragged habit-row offset (<= 0, px) should snap to: open (-maxOffsetPx) past halfway, else closed (0). */
-internal fun swipeOpenTarget(offsetPx: Float, maxOffsetPx: Float): Float =
-    if (offsetPx <= -maxOffsetPx / 2f) -maxOffsetPx else 0f
+internal enum class SwipeAction { None, Delete, Archive }
+
+/** Snap target (signed px) and the action to fire immediately, for a dragged habit row. */
+internal data class SwipeOutcome(val targetPx: Float, val action: SwipeAction)
+
+private const val OpenFraction = 0.28f
+private const val CommitFraction = 0.6f
+
+/**
+ * Swipe right (positive offset) reveals Delete on the left; swipe left reveals Archive on the
+ * right. In RTL, start/end are mirrored so the physical directions swap which action they trigger.
+ * Past [OpenFraction] of [rowWidthPx] the row snaps open to [pillPx]; past [CommitFraction] it
+ * commits the action immediately.
+ */
+internal fun swipeOutcome(offsetPx: Float, rowWidthPx: Float, pillPx: Float, rtl: Boolean): SwipeOutcome {
+    if (rowWidthPx <= 0f) return SwipeOutcome(0f, SwipeAction.None)
+    val mag = abs(offsetPx)
+    val sign = if (offsetPx >= 0f) 1f else -1f
+    val positiveAction = if (rtl) SwipeAction.Archive else SwipeAction.Delete
+    val negativeAction = if (rtl) SwipeAction.Delete else SwipeAction.Archive
+    return when {
+        mag >= rowWidthPx * CommitFraction -> SwipeOutcome(sign * rowWidthPx, if (sign > 0f) positiveAction else negativeAction)
+        mag >= rowWidthPx * OpenFraction -> SwipeOutcome(sign * pillPx, SwipeAction.None)
+        else -> SwipeOutcome(0f, SwipeAction.None)
+    }
+}
 
 @Composable
 private fun HabitCardContent(x: Habit, onEdit: () -> Unit) {
@@ -66,24 +102,43 @@ private fun HabitCardContent(x: Habit, onEdit: () -> Unit) {
                 Meta("${x.category} · ${sched(x)}")
             }
             Box(
-                Modifier.size(44.dp).clickable(role = Role.Button, onClick = onEdit),
+                Modifier.size(48.dp).clickable(role = Role.Button, onClick = onEdit),
                 contentAlignment = Alignment.Center,
-            ) { T("✎", 20.sp) }
+            ) {
+                Image(
+                    painter = painterResource(Res.drawable.ic_edit),
+                    contentDescription = "Edit",
+                    modifier = Modifier.size(20.dp),
+                    colorFilter = ColorFilter.tint(LocalColors.current.ink),
+                )
+            }
         }
     }
 }
 
+private val ActionPillSize = 56.dp
+private val ActionGap = 10.dp
+
 @Composable
-private fun SwipeActionButton(emoji: String, label: String, bg: androidx.compose.ui.graphics.Color, width: Dp, onClick: () -> Unit) {
+private fun SwipeActionButton(
+    emoji: String, label: String, bg: Color, progress: Float, calm: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
+) {
     val c = LocalColors.current
     Box(
-        Modifier.fillMaxHeight().width(width).comic(bg, c.ink, RoundedCornerShape(0.dp), 3.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+        modifier.size(ActionPillSize)
+            .graphicsLayer {
+                val s = if (calm) 1f else 0.6f + 0.4f * progress
+                scaleX = s; scaleY = s
+                alpha = progress
+            }
+            .comic(bg, c.ink, PopShapes.Action, 3.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            T(emoji, 20.sp)
-            T(label, 12.sp, FontWeight.Bold, androidx.compose.ui.graphics.Color.White)
+            T(emoji, 18.sp)
+            T(label, 11.sp, FontWeight.Bold, Color.White)
         }
     }
 }
@@ -92,13 +147,37 @@ private fun SwipeActionButton(emoji: String, label: String, bg: androidx.compose
 private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
     val density = LocalDensity.current
     val c = LocalColors.current
-    val maxOffsetPx = with(density) { 160.dp.toPx() }
-    val offsetX = remember(x.id) { Animatable(0f) }
+    val calm = store.calm
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+
+    val offsetX = remember(x.id) { Animatable(0f) }
     var removed by remember(x.id) { mutableStateOf(false) }
+    var rowWidthPx by remember { mutableFloatStateOf(0f) }
+    val pillPx = with(density) { (ActionPillSize + ActionGap).toPx() }
+    val springSpec = if (calm) tween<Float>(150) else spring(dampingRatio = 0.65f, stiffness = 300f)
+
+    fun confirmDelete() {
+        scope.launch { offsetX.animateTo(0f, springSpec) }
+        ui.swipedHabitId = null
+        ui.confirm = Confirm(
+            "Delete \"${x.name}\" and all its check-ins? This can't be undone. Archiving keeps history and is usually better.",
+            "Delete",
+        ) { removed = true }
+    }
+    fun toggleArchive() {
+        scope.launch { offsetX.animateTo(0f, springSpec) }
+        ui.swipedHabitId = null
+        val nowArchived = store.toggleArchive(x.id, today)
+        ui.toast(
+            if (nowArchived) "Archived. History is kept." else "Restored.",
+            SnackAction("Undo") { store.toggleArchive(x.id, today) },
+        )
+    }
 
     LaunchedEffect(ui.swipedHabitId) {
-        if (ui.swipedHabitId != x.id && offsetX.value != 0f) offsetX.animateTo(0f, spring())
+        if (ui.swipedHabitId != x.id && offsetX.value != 0f) offsetX.animateTo(0f, springSpec)
     }
     LaunchedEffect(removed) {
         if (removed) {
@@ -113,25 +192,27 @@ private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
         visible = !removed,
         exit = shrinkVertically(tween(220)) + fadeOut(tween(220)),
     ) {
-        Box(Modifier.fillMaxWidth().padding(bottom = 22.dp)) {
-            Row(Modifier.matchParentSize(), horizontalArrangement = Arrangement.End) {
-                SwipeActionButton("📦", if (x.archived != null) "Restore" else "Archive", c.blue, 80.dp) {
-                    scope.launch { offsetX.animateTo(0f, spring()) }
-                    ui.swipedHabitId = null
-                    val nowArchived = store.toggleArchive(x.id, today)
-                    ui.toast(
-                        if (nowArchived) "Archived. History is kept." else "Restored.",
-                        SnackAction("Undo") { store.toggleArchive(x.id, today) },
+        Box(
+            Modifier.fillMaxWidth().padding(bottom = 22.dp)
+                .onSizeChanged { rowWidthPx = it.width.toFloat() }
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction("Delete") { confirmDelete(); true },
+                        CustomAccessibilityAction(if (x.archived != null) "Restore" else "Archive") { toggleArchive(); true },
                     )
-                }
-                SwipeActionButton("🗑", "Delete", c.primary, 80.dp) {
-                    scope.launch { offsetX.animateTo(0f, spring()) }
-                    ui.swipedHabitId = null
-                    ui.confirm = Confirm(
-                        "Delete \"${x.name}\" and all its check-ins? This can't be undone. Archiving keeps history and is usually better.",
-                        "Delete",
-                    ) { removed = true }
-                }
+                },
+        ) {
+            val progress = (abs(offsetX.value) / pillPx).coerceIn(0f, 1f)
+            if (offsetX.value > 1f) {
+                SwipeActionButton(
+                    "🗑", "Delete", c.primary, progress, calm, ::confirmDelete,
+                    Modifier.align(Alignment.CenterStart).padding(start = ActionGap),
+                )
+            } else if (offsetX.value < -1f) {
+                SwipeActionButton(
+                    "📦", if (x.archived != null) "Restore" else "Archive", c.blue, progress, calm, ::toggleArchive,
+                    Modifier.align(Alignment.CenterEnd).padding(end = ActionGap),
+                )
             }
             Box(
                 Modifier.fillMaxWidth()
@@ -139,12 +220,28 @@ private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
                     .draggable(
                         orientation = Orientation.Horizontal,
                         state = rememberDraggableState { delta ->
-                            scope.launch { offsetX.snapTo((offsetX.value + delta).coerceIn(-maxOffsetPx, 0f)) }
+                            val bound = if (rowWidthPx > 0f) rowWidthPx else 10_000f
+                            val wasOpen = abs(offsetX.value) >= pillPx
+                            scope.launch { offsetX.snapTo((offsetX.value + delta).coerceIn(-bound, bound)) }
+                            if (abs(offsetX.value + delta) >= pillPx != wasOpen) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
                         },
                         onDragStopped = {
-                            val target = swipeOpenTarget(offsetX.value, maxOffsetPx)
-                            scope.launch { offsetX.animateTo(target, spring()) }
-                            ui.swipedHabitId = if (target != 0f) x.id else null
+                            val outcome = swipeOutcome(offsetX.value, rowWidthPx, pillPx, rtl)
+                            scope.launch { offsetX.animateTo(outcome.targetPx, springSpec) }
+                            when (outcome.action) {
+                                SwipeAction.Delete -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    ui.swipedHabitId = null
+                                    removed = true
+                                }
+                                SwipeAction.Archive -> {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    toggleArchive()
+                                }
+                                SwipeAction.None -> ui.swipedHabitId = if (outcome.targetPx != 0f) x.id else null
+                            }
                         },
                     )
                     .clickable(
@@ -180,7 +277,7 @@ private fun HabitForm(store: AppStore, ui: UiState, today: LocalDate) {
         FieldLabel("Category")
         DField(cat, { cat = it })
         FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            CATS.keys.forEach { k ->
+            CATS.forEach { k ->
                 Box(
                     Modifier.border(2.dp, c.ink, CircleShape).clickable { cat = k }
                         .padding(horizontal = 10.dp, vertical = 4.dp)

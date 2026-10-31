@@ -28,6 +28,11 @@ val PanelShape = RoundedCornerShape(topStart = 6.dp, topEnd = 14.dp, bottomEnd =
 val BtnShape = RoundedCornerShape(topStart = 6.dp, topEnd = 12.dp, bottomEnd = 6.dp, bottomStart = 10.dp)
 val ChipCornerRadius = 10.dp
 
+/** Rounded-square shape for the swipe-to-reveal Archive/Delete action buttons. */
+object PopShapes {
+    val Action: Shape = RoundedCornerShape(16.dp)
+}
+
 /** Fill + clip + border. */
 fun Modifier.comic(
     bg: Color, border: Color, shape: Shape,
