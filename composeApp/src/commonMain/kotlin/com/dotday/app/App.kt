@@ -77,6 +77,14 @@ fun App() {
         ) {
             val compact = maxWidth <= 600.dp
             CompositionLocalProvider(LocalCompact provides compact, LocalVw provides maxWidth) {
+                if (store.profile == null) {
+                    Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(16.dp)) {
+                            OnboardingScreen(store, ui)
+                        }
+                    }
+                    return@CompositionLocalProvider
+                }
                 Column(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
                         Column(Modifier.widthIn(max = 900.dp).fillMaxWidth().padding(16.dp)) {
