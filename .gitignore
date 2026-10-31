@@ -30,6 +30,7 @@ replay_pid*
 .idea/
 build/
 docs/
+.superpowers/
 
 # Local SDK path, machine-specific
 local.properties
@@ -41,3 +42,6 @@ local.properties
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+ABOUT.md
+images/

@@ -108,8 +108,19 @@ fun App() {
 
                 ui.toastMsg?.let { m ->
                     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars), contentAlignment = Alignment.BottomCenter) {
-                        Box(Modifier.padding(bottom = 80.dp).background(colors.ink, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Row(
+                            Modifier.padding(bottom = 80.dp).background(colors.ink, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
                             T(m, color = colors.paper)
+                            ui.toastAction?.let { a ->
+                                T(
+                                    a.label, color = colors.yellow, weight = FontWeight.Bold,
+                                    modifier = Modifier.clickable(role = Role.Button) { a.onClick(); ui.clearToast() },
+                                )
+                            }
                         }
                     }
                 }
