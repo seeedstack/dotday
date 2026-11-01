@@ -1,10 +1,14 @@
 package com.dotday.app.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +28,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -106,11 +111,12 @@ fun H2(text: String, size: TextUnit = 24.sp, color: Color = LocalColors.current.
     T(text.uppercase(), size, color = color, modifier = modifier, disp = true, spacing = 0.03.em, align = align)
 
 @Composable
-fun Meta(text: String, modifier: Modifier = Modifier) = T(text, 13.sp, color = LocalColors.current.muted, modifier = modifier)
+fun Meta(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Unspecified) =
+    T(text, 13.sp, color = LocalColors.current.muted, modifier = modifier, align = align)
 
 @Composable
-fun ErrText(text: String) {
-    if (text.isNotEmpty()) T(text, weight = FontWeight.Bold, color = LocalColors.current.primary)
+fun ErrText(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Unspecified) {
+    if (text.isNotEmpty()) T(text, weight = FontWeight.Bold, color = LocalColors.current.primary, modifier = modifier, align = align)
 }
 
 /* ---------- Containers ---------- */
@@ -134,14 +140,27 @@ fun Panel(
 enum class BtnKind { Primary, Alt, Bad }
 
 @Composable
-fun DButton(text: String, modifier: Modifier = Modifier, kind: BtnKind = BtnKind.Primary, enabled: Boolean = true, onClick: () -> Unit) {
+fun DButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    kind: BtnKind = BtnKind.Primary,
+    enabled: Boolean = true,
+    contentDescription: String? = null,
+    onClick: () -> Unit,
+) {
     val c = LocalColors.current
+    val calm = LocalCalm.current
     val bg = when (kind) { BtnKind.Primary -> c.yellow; BtnKind.Alt -> c.card; BtnKind.Bad -> c.primary }
     val fg = when (kind) { BtnKind.Primary -> Ink111; BtnKind.Alt -> c.ink; BtnKind.Bad -> Color.White }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressOffset by animateFloatAsState(if (pressed && !calm) 2f else 0f, tween(90))
     Box(
-        modifier.heightIn(min = 44.dp).alpha(if (enabled) 1f else 0.4f)
+        modifier.heightIn(min = 48.dp).alpha(if (enabled) 1f else 0.4f)
+            .offset(y = pressOffset.dp)
             .comic(bg, c.ink, BtnShape, 3.dp)
-            .clickable(role = Role.Button, enabled = enabled, onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, role = Role.Button, enabled = enabled, onClick = onClick)
+            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) { T(text, 15.sp, FontWeight.Bold, fg) }
@@ -189,6 +208,28 @@ fun DField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modif
             .padding(horizontal = 10.dp, vertical = 6.dp),
         decorationBox = { inner -> Box(Modifier.heightIn(min = 30.dp), contentAlignment = Alignment.CenterStart) { inner() } },
     )
+}
+
+/** Read-only labelled value row for a profile/settings summary; one semantic node per row. */
+@Composable
+fun ProfileInfoRow(label: String, value: String, modifier: Modifier = Modifier, contentDescription: String = "$label, $value") =
+    ProfileInfoRow(label, modifier, contentDescription) { T(value, weight = FontWeight.SemiBold) }
+
+@Composable
+fun ProfileInfoRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String,
+    value: @Composable () -> Unit,
+) {
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 6.dp).semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        T(label.uppercase(), 12.sp, FontWeight.Bold, LocalColors.current.muted, spacing = 0.02.em)
+        value()
+    }
 }
 
 @Composable
@@ -332,20 +373,28 @@ fun <T> TilePicker(
     }
 }
 
-/** Progress indicator for a multi-step flow, styled as comic panel dots. */
+/** Progress indicator for a multi-step flow: comic dots plus a "PANEL n/total" pill. One semantic node. */
 @Composable
 fun ProgressDots(step: Int, total: Int, modifier: Modifier = Modifier) {
     val c = LocalColors.current
-    Row(
-        modifier.semantics { contentDescription = "Panel ${step + 1} of $total" },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Column(
+        modifier.clearAndSetSemantics { contentDescription = "Step ${step + 1} of $total" },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        repeat(total) { i ->
-            Box(
-                Modifier.size(if (i == step) 12.dp else 8.dp)
-                    .background(if (i == step) c.primary else c.muted, CircleShape),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(total) { i ->
+                Box(
+                    Modifier.size(if (i == step) 12.dp else 8.dp)
+                        .background(if (i == step) c.primary else c.muted, CircleShape),
+                )
+            }
         }
+        Box(
+            Modifier.padding(top = 6.dp)
+                .background(c.card, RoundedCornerShape(ChipCornerRadius))
+                .border(1.dp, c.ink, RoundedCornerShape(ChipCornerRadius))
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+        ) { T("PANEL ${step + 1}/$total", 12.sp, FontWeight.Bold, c.ink) }
     }
 }
 

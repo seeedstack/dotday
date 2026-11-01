@@ -8,7 +8,14 @@ import kotlinx.datetime.LocalDate
 
 enum class Tab(val label: String) { Today("Today"), Habits("Habits"), Insights("Insights"), Settings("Settings") }
 
-class Confirm(val msg: String, val yes: String, val onYes: () -> Unit)
+class Confirm(
+    val msg: String,
+    val yes: String,
+    val yesKind: BtnKind = BtnKind.Bad,
+    val cancelLabel: String = "Cancel",
+    val cancelKind: BtnKind = BtnKind.Alt,
+    val onYes: () -> Unit,
+)
 class Burst(val text: String, val id: Int)
 class SnackAction(val label: String, val onClick: () -> Unit)
 

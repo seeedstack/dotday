@@ -84,8 +84,12 @@ fun App() {
             val compact = maxWidth <= 600.dp
             CompositionLocalProvider(LocalCompact provides compact, LocalVw provides maxWidth) {
                 if (store.profile == null) {
-                    Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(16.dp)) {
+                    Box(
+                        // outer BoxWithConstraints already consumed the horizontal/top safeDrawing inset; bottom is still live here.
+                        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding(),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().fillMaxHeight()) {
                             OnboardingScreen(store, ui)
                         }
                     }
@@ -149,8 +153,8 @@ fun App() {
                             T(cf.msg)
                             Spacer(Modifier.height(16.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                                DButton("Cancel", kind = BtnKind.Alt) { ui.confirm = null }
-                                DButton(cf.yes, kind = BtnKind.Bad) { ui.confirm = null; cf.onYes() }
+                                DButton(cf.cancelLabel, kind = cf.cancelKind) { ui.confirm = null }
+                                DButton(cf.yes, kind = cf.yesKind) { ui.confirm = null; cf.onYes() }
                             }
                         }
                     }

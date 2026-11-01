@@ -9,7 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -68,39 +70,70 @@ fun OnboardingScreen(store: AppStore, ui: UiState) {
     )
     val valid = isStepValid(state.step, args)
 
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        ProgressDots(state.step, ONBOARDING_STEP_COUNT, Modifier.padding(bottom = 12.dp))
-        Panel {
-            AnimatedContent(
-                state.step,
-                transitionSpec = { slideInHorizontally { it } togetherWith slideOutHorizontally { -it } },
-            ) { step ->
-                when (step) {
-                    0 -> WelcomeStep()
-                    1 -> NameStep(state)
-                    2 -> BirthYearStep(state, currentYear)
-                    3 -> GenderStep(state)
-                    4 -> BodyStatsStep(state)
-                    5 -> ActivityLevelStep(state)
-                    6 -> RoutineStep(state)
-                    7 -> FocusStep(state)
-                    8 -> StarterHabitsStep(state)
-                    9 -> AvatarThemeStep(state)
-                    10 -> NotificationsStep(state)
-                    11 -> DoneStep(store, ui, state)
-                    else -> {}
+    fun finishOnboarding() {
+        val profile = state.toProfile(state.notificationsGranted)
+        if (state.notificationsGranted) scheduleDailyReminder(profile.reminderTime.hour, profile.reminderTime.minute)
+        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
+        val habits = state.selectedHabitNames.map { name ->
+            Habit(
+                id = "h" + Clock.System.now().toEpochMilliseconds().toString(36) + name.hashCode().toString(36),
+                name = name, category = profile.focus.label, color = profile.accentHex,
+                days = (0..6).toList(), start = today,
+            )
+        }
+        store.completeOnboarding(profile, habits)
+        ui.fireBurst(Copy.ALL)
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val minH = maxHeight
+                Column(
+                    Modifier.fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = minH)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Panel(modifier = Modifier.fillMaxWidth()) {
+                        AnimatedContent(
+                            state.step,
+                            transitionSpec = { slideInHorizontally { it } togetherWith slideOutHorizontally { -it } },
+                        ) { step ->
+                            when (step) {
+                                0 -> WelcomeStep()
+                                1 -> NameStep(state)
+                                2 -> BirthYearStep(state, currentYear)
+                                3 -> GenderStep(state)
+                                4 -> BodyStatsStep(state)
+                                5 -> ActivityLevelStep(state)
+                                6 -> RoutineStep(state)
+                                7 -> FocusStep(state)
+                                8 -> StarterHabitsStep(state)
+                                9 -> AvatarThemeStep(state)
+                                10 -> NotificationsStep(state)
+                                11 -> DoneStep(state)
+                                else -> {}
+                            }
+                        }
+                    }
                 }
             }
         }
-        if (state.step < ONBOARDING_STEP_COUNT - 1) {
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (state.step > 0) DButton("Back", kind = BtnKind.Alt) { state.back() } else Spacer(Modifier.width(1.dp))
-                when (state.step) {
-                    0 -> DButton(Copy.OB_WELCOME_CTA) { state.next() }
-                    else -> DButton("NEXT!", enabled = valid) { state.next() }
-                }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (state.step > 0) DButton("Back", kind = BtnKind.Alt, modifier = Modifier.weight(1f)) { state.back() }
+            when (state.step) {
+                0 -> DButton(Copy.OB_WELCOME_CTA, modifier = Modifier.weight(1f)) { state.next() }
+                ONBOARDING_STEP_COUNT - 1 -> DButton(Copy.OB_DONE_CTA, modifier = Modifier.weight(1f)) { finishOnboarding() }
+                else -> DButton("NEXT!", modifier = Modifier.weight(1f), enabled = valid) { state.next() }
             }
         }
+        ProgressDots(state.step, ONBOARDING_STEP_COUNT, Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp))
     }
 }
 
@@ -114,30 +147,35 @@ private fun WelcomeStep() {
 
 @Composable
 private fun NameStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_NAME_TITLE)
-        T(Copy.OB_NAME_SUB, modifier = Modifier.padding(bottom = 8.dp))
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_NAME_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        T(Copy.OB_NAME_SUB, align = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
         DField(state.name, { state.name = it }, maxLen = 24)
-        if (state.name.isNotEmpty()) ErrText(if (state.name.trim().length in 1..24) "" else "1–24 characters, please.")
+        if (state.name.isNotEmpty()) {
+            ErrText(
+                if (state.name.trim().length in 1..24) "" else "1–24 characters, please.",
+                align = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
 @Composable
 private fun BirthYearStep(state: OnboardingState, currentYear: Int) {
-    Column {
-        H2(Copy.OB_BIRTHYEAR_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_BIRTHYEAR_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         WheelPicker(
             minBirthYear(currentYear)..maxBirthYear(currentYear), state.birthYear,
             { state.birthYear = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
         )
-        Meta("Age: ${currentYear - state.birthYear}", Modifier.padding(top = 4.dp))
+        Meta("Age: ${currentYear - state.birthYear}", Modifier.fillMaxWidth().padding(top = 4.dp), align = TextAlign.Center)
     }
 }
 
 @Composable
 private fun BodyStatsStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_BODYSTATS_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_BODYSTATS_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         TilePicker(
             UnitSystem.entries, state.unitSystem, { state.unitSystem = it },
             Modifier.padding(top = 8.dp, bottom = 8.dp),
@@ -176,8 +214,8 @@ private fun BodyStatsStep(state: OnboardingState) {
 
 @Composable
 private fun ActivityLevelStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_ACTIVITY_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_ACTIVITY_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         TilePicker(
             ActivityLevel.entries, state.activityLevel ?: ActivityLevel.entries.first(), { state.activityLevel = it },
             Modifier.padding(top = 8.dp),
@@ -192,19 +230,21 @@ private fun ActivityLevelStep(state: OnboardingState) {
 
 @Composable
 private fun RoutineStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_ROUTINE_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_ROUTINE_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         FieldLabel("Wake up")
         TimeWheelPicker(state.wakeTime, { state.wakeTime = it })
         FieldLabel("Sleep")
         TimeWheelPicker(state.sleepTime, { state.sleepTime = it })
         FieldLabel("Remind me at")
         TimeWheelPicker(state.reminderTime, { state.reminderTime = it })
-        if (state.wakeTime == state.sleepTime) ErrText("Wake and sleep times should differ.")
+        if (state.wakeTime == state.sleepTime) {
+            ErrText("Wake and sleep times should differ.", align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
-private val FOCUS_ICONS: Map<Focus, DrawableResource> = mapOf(
+val FOCUS_ICONS: Map<Focus, DrawableResource> = mapOf(
     Focus.GYM to Res.drawable.ic_focus_gym,
     Focus.MOVIE to Res.drawable.ic_focus_movie,
     Focus.BOOK to Res.drawable.ic_focus_book,
@@ -215,8 +255,8 @@ private val FOCUS_ICONS: Map<Focus, DrawableResource> = mapOf(
 
 @Composable
 private fun FocusStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_FOCUS_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_FOCUS_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         TilePicker(
             Focus.entries, state.focus ?: Focus.entries.first(),
             { f ->
@@ -239,8 +279,8 @@ private fun FocusStep(state: OnboardingState) {
 @Composable
 private fun StarterHabitsStep(state: OnboardingState) {
     val focus = state.focus ?: Focus.GYM
-    Column {
-        H2(Copy.OB_STARTER_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_STARTER_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         STARTER_HABITS.getValue(focus).forEach { name ->
             val on = state.selectedHabitNames.contains(name)
             Row(
@@ -257,8 +297,8 @@ private fun AvatarThemeStep(state: OnboardingState) {
     val c = LocalColors.current
     val selectedAvatar = AVATARS.firstOrNull { it.id == state.avatarId } ?: AVATARS.first()
     val selectedAccent = state.accentHex ?: PAL.first().first
-    Column {
-        H2(Copy.OB_AVATAR_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_AVATAR_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         FieldLabel("Avatar")
         TilePicker(AVATARS, selectedAvatar, { state.avatarId = it.id }) { a, _ ->
             Image(painterResource(a.drawable), contentDescription = a.id, modifier = Modifier.size(40.dp))
@@ -284,11 +324,11 @@ private fun AvatarThemeStep(state: OnboardingState) {
 @Composable
 private fun NotificationsStep(state: OnboardingState) {
     val requestPermission = rememberNotificationPermissionRequester()
-    Column {
-        H2(Copy.OB_NOTIFY_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_NOTIFY_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         T(
             Copy.reminderExplainer(state.reminderTime.toString().take(5)),
-            modifier = Modifier.padding(bottom = 8.dp),
+            align = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         )
         DButton(if (state.notificationsRequested) "Done ✓" else "Allow reminders", enabled = !state.notificationsRequested) {
             requestPermission { granted ->
@@ -296,38 +336,29 @@ private fun NotificationsStep(state: OnboardingState) {
                 state.notificationsRequested = true
             }
         }
-        if (state.notificationsRequested && !state.notificationsGranted) Meta(Copy.OB_NOTIFY_DENIED, Modifier.padding(top = 8.dp))
-    }
-}
-
-@Composable
-private fun DoneStep(store: AppStore, ui: UiState, state: OnboardingState) {
-    val focus = state.focus ?: Focus.GYM
-    Column {
-        H2(Copy.OB_DONE_TITLE.replace("{name}", state.name.ifEmpty { "friend" }))
-        T("Focus: ${focus.label}", modifier = Modifier.padding(top = 8.dp))
-        T("${state.selectedHabitNames.size} habits ready to go.")
-        DButton(Copy.OB_DONE_CTA, modifier = Modifier.padding(top = 16.dp)) {
-            val profile = state.toProfile(state.notificationsGranted)
-            if (state.notificationsGranted) scheduleDailyReminder(profile.reminderTime.hour, profile.reminderTime.minute)
-            val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
-            val habits = state.selectedHabitNames.map { name ->
-                Habit(
-                    id = "h" + Clock.System.now().toEpochMilliseconds().toString(36) + name.hashCode().toString(36),
-                    name = name, category = profile.focus.label, color = profile.accentHex,
-                    days = (0..6).toList(), start = today,
-                )
-            }
-            store.completeOnboarding(profile, habits)
-            ui.fireBurst(Copy.ALL)
+        if (state.notificationsRequested && !state.notificationsGranted) {
+            Meta(Copy.OB_NOTIFY_DENIED, Modifier.fillMaxWidth().padding(top = 8.dp), align = TextAlign.Center)
         }
     }
 }
 
 @Composable
+private fun DoneStep(state: OnboardingState) {
+    val focus = state.focus ?: Focus.GYM
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(
+            Copy.OB_DONE_TITLE.replace("{name}", state.name.ifEmpty { "friend" }),
+            align = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+        T("Focus: ${focus.label}", align = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+        T("${state.selectedHabitNames.size} habits ready to go.", align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
 private fun GenderStep(state: OnboardingState) {
-    Column {
-        H2(Copy.OB_GENDER_TITLE)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        H2(Copy.OB_GENDER_TITLE, align = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         TilePicker(
             Gender.entries, state.gender ?: Gender.entries.first(), { state.gender = it },
             Modifier.padding(top = 8.dp),
