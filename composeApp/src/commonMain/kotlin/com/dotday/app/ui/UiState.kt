@@ -8,6 +8,9 @@ import kotlinx.datetime.LocalDate
 
 enum class Tab(val label: String) { Today("Today"), Habits("Habits"), Insights("Insights"), Settings("Settings") }
 
+/** Single switch for profile editing. Flip to true to re-enable; no other source of truth. */
+const val PROFILE_EDITING_ENABLED = false
+
 class Confirm(
     val msg: String,
     val yes: String,
@@ -31,6 +34,7 @@ class UiState {
     var stampNew by mutableStateOf<String?>(null)
     var selectedDate by mutableStateOf<LocalDate?>(null)   // null = follow today
     var swipedHabitId by mutableStateOf<String?>(null)     // id of the habit row with its swipe actions revealed
+    var profileEditRequested by mutableStateOf(false)
 
     private var burstSeq = 0
 

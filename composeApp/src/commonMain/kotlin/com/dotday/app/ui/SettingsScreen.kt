@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,12 +29,10 @@ import com.dotday.app.domain.PAL
 import com.dotday.app.domain.STARTER_HABITS
 import com.dotday.app.domain.UnitSystem
 import com.dotday.app.domain.UserProfile
-import com.dotday.app.domain.cmToFtIn
 import com.dotday.app.domain.isValidHeightCm
 import com.dotday.app.domain.isValidName
 import com.dotday.app.domain.isValidSchedule
 import com.dotday.app.domain.isValidWeightKg
-import com.dotday.app.domain.kgToLb
 import com.dotday.app.domain.maxBirthYear
 import com.dotday.app.domain.minBirthYear
 import com.dotday.app.platform.rememberBackupExporter
@@ -102,15 +101,6 @@ fun SettingsScreen(store: AppStore, ui: UiState, today: LocalDate) {
     }
 }
 
-private fun fmtHeight(cm: Float, unit: UnitSystem): String =
-    if (unit == UnitSystem.METRIC) "${cm.toInt()} cm" else {
-        val (ft, inch) = cmToFtIn(cm)
-        "$ft'${inch.toInt()}\""
-    }
-
-private fun fmtWeight(kg: Float, unit: UnitSystem): String =
-    if (unit == UnitSystem.METRIC) "${kg.toInt()} kg" else "${kgToLb(kg).toInt()} lb"
-
 private fun fmtGender(g: com.dotday.app.domain.Gender): String = when (g) {
     com.dotday.app.domain.Gender.MALE -> "Male"; com.dotday.app.domain.Gender.FEMALE -> "Female"
     com.dotday.app.domain.Gender.NON_BINARY -> "Non-binary"; com.dotday.app.domain.Gender.PREFER_NOT_TO_SAY -> "Prefer not to say"
@@ -129,14 +119,24 @@ private fun addStarterHabits(store: AppStore, ui: UiState, today: LocalDate, foc
     if (missing.isNotEmpty()) ui.toast("Added ${missing.size} habit(s).")
 }
 
+/** True only when a pending edit request should actually open the edit form. */
+internal fun shouldEnterEditMode(requested: Boolean, editingEnabled: Boolean): Boolean = requested && editingEnabled
+
 @Composable
-private fun ProfilePanel(store: AppStore, ui: UiState, today: LocalDate, p: UserProfile) {
+private fun ProfilePanel(store: AppStore, ui: UiState, today: LocalDate, p: UserProfile, editingEnabled: Boolean = PROFILE_EDITING_ENABLED) {
     var editing by remember { mutableStateOf(false) }
     var draft by remember(editing) { mutableStateOf(p) }
     val valid = isValidName(draft.name) && isValidHeightCm(draft.heightCm) && isValidWeightKg(draft.weightKg) &&
         isValidSchedule(draft.wakeTime, draft.sleepTime)
     val dirty = draft != p
     val currentYear = today.year
+
+    LaunchedEffect(ui.profileEditRequested) {
+        if (ui.profileEditRequested) {
+            editing = shouldEnterEditMode(requested = true, editingEnabled = editingEnabled)
+            ui.profileEditRequested = false
+        }
+    }
 
     Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -168,44 +168,19 @@ private fun ProfilePanel(store: AppStore, ui: UiState, today: LocalDate, p: User
                     }
                 }
             } else {
-                DButton("Edit", kind = BtnKind.Primary) { editing = true }
+                DButton("Edit", kind = BtnKind.Primary, enabled = editingEnabled) { if (editingEnabled) editing = true }
             }
+        }
+        if (!editing && !editingEnabled) {
+            T(Copy.PROFILE_EDIT_PAUSED, 13.sp, color = LocalColors.current.muted, modifier = Modifier.padding(top = 4.dp))
         }
 
         if (!editing) {
-            ProfileInfoRow("Avatar", contentDescription = "Avatar") {
-                Image(
-                    painterResource((AVATARS.firstOrNull { it.id == p.avatarId } ?: AVATARS.first()).drawable),
-                    contentDescription = null, modifier = Modifier.size(40.dp),
-                )
-            }
             ProfileInfoRow("Name", p.name)
             ProfileInfoRow("Age", "${currentYear - p.birthYear} (born ${p.birthYear})")
             ProfileInfoRow("Gender", fmtGender(p.gender))
-            ProfileInfoRow("Height", fmtHeight(p.heightCm, p.unitSystem))
-            ProfileInfoRow("Weight", fmtWeight(p.weightKg, p.unitSystem))
-            ProfileInfoRow("Activity level", Copy.ACTIVITY_COPY.getValue(p.activityLevel.name))
             ProfileInfoRow("Wake up", p.wakeTime.toString().take(5))
             ProfileInfoRow("Sleep", p.sleepTime.toString().take(5))
-            ProfileInfoRow("Reminder time", p.reminderTime.toString().take(5))
-            ProfileInfoRow("Main focus", contentDescription = "Main focus, ${p.focus.label}") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    FOCUS_ICONS[p.focus]?.let { Image(painterResource(it), contentDescription = null, modifier = Modifier.size(20.dp)) }
-                    Spacer(Modifier.width(6.dp))
-                    T(p.focus.label, weight = FontWeight.SemiBold)
-                }
-            }
-            val accentName = PAL.firstOrNull { it.first == p.accentHex }?.second ?: p.accentHex
-            ProfileInfoRow("Accent color", contentDescription = "Accent color, $accentName") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(20.dp).background(hex(p.accentHex), CircleShape))
-                    Spacer(Modifier.width(6.dp))
-                    T(accentName, weight = FontWeight.SemiBold)
-                }
-            }
-            ProfileInfoRow(
-                "Notifications", if (p.notificationsGranted) "ON" else "OFF — you can turn it on later in system Settings",
-            )
 
             val missing = STARTER_HABITS.getValue(p.focus).filter { name -> store.habits.none { h -> h.name == name } }
             if (missing.isNotEmpty()) {

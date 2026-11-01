@@ -11,12 +11,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,6 +28,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import org.jetbrains.compose.resources.painterResource
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
 import com.dotday.app.platform.scheduleDailyReminder
@@ -98,7 +103,12 @@ fun App() {
                 Column(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
                         Column(Modifier.widthIn(max = 900.dp).fillMaxWidth().padding(16.dp)) {
-                            Header(store, today)
+                            store.profile?.let { p ->
+                                Header(store, today, p) {
+                                    ui.go(Tab.Settings)
+                                    if (PROFILE_EDITING_ENABLED) ui.profileEditRequested = true
+                                }
+                            }
                             if (!compact) NavBar(ui, Modifier.padding(bottom = 18.dp))
                             when (ui.tab) {
                                 Tab.Today -> TodayScreen(store, ui, today)
@@ -165,7 +175,7 @@ fun App() {
 }
 
 @Composable
-private fun Header(store: AppStore, today: LocalDate) {
+private fun Header(store: AppStore, today: LocalDate, profile: UserProfile, onProfileClick: () -> Unit) {
     val c = LocalColors.current
     val f = LocalFonts.current
     val hr = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -185,12 +195,35 @@ private fun Header(store: AppStore, today: LocalDate) {
                     fontFamily = f.disp, fontSize = HeaderTitleFontSize, lineHeight = 48.sp, letterSpacing = 0.03.em, color = c.primary,
                 ),
             )
-            StreakChip(
-                "🔥 $best ${Copy.STREAK}".trim(), chipHeight,
+            Row(
                 Modifier.alignBy { it.measuredHeight },
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StreakChip("🔥 $best ${Copy.STREAK}".trim(), chipHeight)
+                ProfileAvatarButton(profile, chipHeight, onProfileClick)
+            }
         }
         T(greet, 14.sp, color = c.muted)
+    }
+}
+
+@Composable
+private fun ProfileAvatarButton(profile: UserProfile, visualSize: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    val c = LocalColors.current
+    val avatar = AVATARS.firstOrNull { it.id == profile.avatarId } ?: AVATARS.first()
+    Box(
+        Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .clickable(role = Role.Button) { onClick() }
+            .semantics {
+                contentDescription = if (PROFILE_EDITING_ENABLED) "Edit profile, ${profile.name}" else "Profile, ${profile.name}"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painterResource(avatar.drawable), contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = Modifier.size(visualSize).clip(CircleShape).comic(c.card, c.ink, CircleShape, 3.dp),
+        )
     }
 }
 

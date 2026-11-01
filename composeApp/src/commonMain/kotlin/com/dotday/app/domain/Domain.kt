@@ -120,6 +120,8 @@ object Copy {
     const val OB_DONE_CTA = "START!"
     const val OB_NOTIFY_DENIED = "No worries — you can turn reminders on later in Settings."
 
+    const val PROFILE_EDIT_PAUSED = "Profile editing is paused for now."
+
     val ACTIVITY_COPY = mapOf(
         "COUCH_POTATO" to "Couch Potato — resting between arcs.",
         "LIGHT" to "Light — a few panels a week.",
