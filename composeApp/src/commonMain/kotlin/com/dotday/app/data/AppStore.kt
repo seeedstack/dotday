@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dotday.app.domain.Habit
+import com.dotday.app.domain.UserProfile
 import com.dotday.app.domain.addDays
 import com.dotday.app.domain.isDue
 import com.dotday.app.sdk.AddonParseResult
@@ -25,6 +26,7 @@ private data class Persisted(
     val calm: Boolean = false,
     val theme: String = "auto",
     val addons: List<InstalledAddon> = emptyList(),
+    val profile: UserProfile? = null,
 )
 
 @Serializable
@@ -43,6 +45,7 @@ class AppStore(private val settings: Settings) {
     var calm by mutableStateOf(false); private set
     var theme by mutableStateOf("auto"); private set
     var addons by mutableStateOf<List<InstalledAddon>>(emptyList()); private set
+    var profile by mutableStateOf<UserProfile?>(null); private set
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val prettyJson = Json { prettyPrint = true; encodeDefaults = true }
@@ -58,6 +61,7 @@ class AppStore(private val settings: Settings) {
             calm = p.calm
             theme = p.theme
             addons = p.addons
+            profile = p.profile
         }
     }
 
@@ -66,7 +70,7 @@ class AppStore(private val settings: Settings) {
             settings.putString(
                 KEY,
                 json.encodeToString(
-                    Persisted(habits, logs.mapValues { it.value.toList() }, demo, weekStart, calm, theme, addons)
+                    Persisted(habits, logs.mapValues { it.value.toList() }, demo, weekStart, calm, theme, addons, profile)
                 )
             )
         }
@@ -117,6 +121,19 @@ class AppStore(private val settings: Settings) {
 
     fun wipe() {
         habits = emptyList(); logs = emptyMap(); demo = false; save()
+    }
+
+    /** One atomic write: the finished profile and its starter habits land together or not at all. */
+    fun completeOnboarding(profile: UserProfile, starterHabits: List<Habit>) {
+        habits = habits + starterHabits
+        this.profile = profile
+        save()
+    }
+
+    fun updateProfile(transform: (UserProfile) -> UserProfile) {
+        val current = profile ?: return
+        profile = transform(current)
+        save()
     }
 
     fun updateTheme(v: String) { theme = v; save() }

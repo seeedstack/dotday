@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -43,11 +44,14 @@ import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
 import com.dotday.app.domain.*
 import com.dotday.app.resources.Res
+import com.dotday.app.resources.ic_archive
 import com.dotday.app.resources.ic_edit
+import com.dotday.app.resources.ic_trash
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -116,12 +120,12 @@ private fun HabitCardContent(x: Habit, onEdit: () -> Unit) {
     }
 }
 
-private val ActionPillSize = 56.dp
+private val ActionPillSize = 80.dp
 private val ActionGap = 10.dp
 
 @Composable
 private fun SwipeActionButton(
-    emoji: String, label: String, bg: Color, progress: Float, calm: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
+    icon: DrawableResource, label: String, bg: Color, progress: Float, calm: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
 ) {
     val c = LocalColors.current
     Box(
@@ -137,7 +141,12 @@ private fun SwipeActionButton(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            T(emoji, 18.sp)
+            Image(
+                painter = painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                contentScale = ContentScale.Fit,
+            )
             T(label, 11.sp, FontWeight.Bold, Color.White)
         }
     }
@@ -205,12 +214,12 @@ private fun HabitRow(store: AppStore, ui: UiState, x: Habit, today: LocalDate) {
             val progress = (abs(offsetX.value) / pillPx).coerceIn(0f, 1f)
             if (offsetX.value > 1f) {
                 SwipeActionButton(
-                    "🗑", "Delete", c.primary, progress, calm, ::confirmDelete,
+                    Res.drawable.ic_trash, "Delete", c.primary, progress, calm, ::confirmDelete,
                     Modifier.align(Alignment.CenterStart).padding(start = ActionGap),
                 )
             } else if (offsetX.value < -1f) {
                 SwipeActionButton(
-                    "📦", if (x.archived != null) "Restore" else "Archive", c.blue, progress, calm, ::toggleArchive,
+                    Res.drawable.ic_archive, if (x.archived != null) "Restore" else "Archive", c.blue, progress, calm, ::toggleArchive,
                     Modifier.align(Alignment.CenterEnd).padding(end = ActionGap),
                 )
             }
@@ -312,11 +321,13 @@ private fun HabitForm(store: AppStore, ui: UiState, today: LocalDate) {
             listOf(1, 2, 3, 4, 5, 6, 0).forEach { d ->
                 val on = days.contains(d)
                 Row(
-                    Modifier.heightIn(min = 44.dp).border(2.dp, c.ink, CircleShape)
-                        .clickable(role = Role.Checkbox) { days = if (on) days - d else days + d }
-                        .padding(horizontal = 10.dp),
+                    Modifier.heightIn(min = 38.dp)
+                        .background(if (on) c.ink else Color.Transparent, CircleShape)
+                        .border(2.dp, c.ink, CircleShape)
+                        .clickable(role = Role.Switch) { days = if (on) days - d else days + d }
+                        .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                ) { Check(on); Spacer(Modifier.width(4.dp)); T(DN[d]) }
+                ) { T(DN[d], color = if (on) c.paper else c.ink) }
             }
         }
         ErrText(eD)
