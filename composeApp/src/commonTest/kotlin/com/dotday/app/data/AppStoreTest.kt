@@ -1,11 +1,19 @@
 package com.dotday.app.data
 
+import com.dotday.app.domain.ActivityLevel
+import com.dotday.app.domain.Focus
+import com.dotday.app.domain.Gender
 import com.dotday.app.domain.Habit
+import com.dotday.app.domain.UnitSystem
+import com.dotday.app.domain.UserProfile
 import com.russhwolf.settings.Settings
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Minimal in-memory [Settings]; the project has no test artifact for multiplatform-settings. */
@@ -40,6 +48,15 @@ class AppStoreTest {
     private val today = LocalDate(2026, 1, 1)
     private fun habit(id: String = "h1") = Habit(id, "Run", "Fitness", "#E63946", listOf(0, 1, 2, 3, 4, 5, 6), today)
 
+    private fun profile(name: String = "Ada") = UserProfile(
+        name = name, birthYear = 2000, gender = Gender.PREFER_NOT_TO_SAY,
+        heightCm = 170f, weightKg = 65f, unitSystem = UnitSystem.METRIC,
+        activityLevel = ActivityLevel.MODERATE,
+        wakeTime = LocalTime(7, 0), sleepTime = LocalTime(23, 0), reminderTime = LocalTime(9, 0),
+        focus = Focus.GYM, avatarId = "avatar_01", accentHex = "#E63946",
+        notificationsGranted = true, createdAt = Instant.fromEpochMilliseconds(0),
+    )
+
     @Test fun toggleArchiveTogglesAndKeepsTheHabit() {
         val store = AppStore(FakeSettings())
         store.upsert(habit())
@@ -63,5 +80,29 @@ class AppStoreTest {
         store.restore(h, log)
         assertEquals(h, store.habits.single())
         assertEquals(log, store.done("h1"))
+    }
+
+    @Test fun completeOnboardingSetsProfileAndHabitsAndPersistsBoth() {
+        val settings = FakeSettings()
+        val store = AppStore(settings)
+        val p = profile()
+        store.completeOnboarding(p, listOf(habit("s1")))
+
+        val reloaded = AppStore(settings)
+        assertEquals(p, reloaded.profile)
+        assertEquals("s1", reloaded.habits.single().id)
+    }
+
+    @Test fun updateProfileTransformsAnExistingProfile() {
+        val store = AppStore(FakeSettings())
+        store.completeOnboarding(profile("Ada"), emptyList())
+        store.updateProfile { it.copy(name = "Grace") }
+        assertEquals("Grace", store.profile?.name)
+    }
+
+    @Test fun updateProfileOnNullProfileIsANoOp() {
+        val store = AppStore(FakeSettings())
+        store.updateProfile { it.copy(name = "Grace") }
+        assertNull(store.profile)
     }
 }

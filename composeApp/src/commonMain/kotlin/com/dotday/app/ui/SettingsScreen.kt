@@ -1,8 +1,12 @@
 package com.dotday.app.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,19 +14,41 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dotday.app.data.AppStore
+import com.dotday.app.domain.ActivityLevel
+import com.dotday.app.domain.AVATARS
+import com.dotday.app.domain.Copy
+import com.dotday.app.domain.Focus
+import com.dotday.app.domain.Habit
+import com.dotday.app.domain.PAL
+import com.dotday.app.domain.STARTER_HABITS
+import com.dotday.app.domain.UnitSystem
+import com.dotday.app.domain.UserProfile
+import com.dotday.app.domain.isValidHeightCm
+import com.dotday.app.domain.isValidName
+import com.dotday.app.domain.isValidSchedule
+import com.dotday.app.domain.isValidWeightKg
+import com.dotday.app.domain.maxBirthYear
+import com.dotday.app.domain.minBirthYear
 import com.dotday.app.platform.rememberBackupExporter
+import com.dotday.app.platform.scheduleDailyReminder
 import com.dotday.app.sdk.InstalledAddon
 import com.dotday.app.sdk.activeTheme
+import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun SettingsScreen(store: AppStore, ui: UiState, today: LocalDate) {
     val export = rememberBackupExporter()
     Column {
         H2("Settings", modifier = Modifier.padding(bottom = 12.dp))
+        store.profile?.let { ProfilePanel(store, ui, today, it) }
         Panel {
             FieldLabel("Appearance")
             val addonTheme = store.addons.activeTheme()
@@ -70,6 +96,154 @@ fun SettingsScreen(store: AppStore, ui: UiState, today: LocalDate) {
             if (store.addons.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 store.addons.forEach { a -> AddonRow(store, ui, a) }
+            }
+        }
+    }
+}
+
+private fun fmtGender(g: com.dotday.app.domain.Gender): String = when (g) {
+    com.dotday.app.domain.Gender.MALE -> "Male"; com.dotday.app.domain.Gender.FEMALE -> "Female"
+    com.dotday.app.domain.Gender.NON_BINARY -> "Non-binary"; com.dotday.app.domain.Gender.PREFER_NOT_TO_SAY -> "Prefer not to say"
+}
+
+private fun addStarterHabits(store: AppStore, ui: UiState, today: LocalDate, focus: Focus, accentHex: String) {
+    val missing = STARTER_HABITS.getValue(focus).filter { name -> store.habits.none { h -> h.name == name } }
+    missing.forEach { name ->
+        store.upsert(
+            Habit(
+                id = "h" + Clock.System.now().toEpochMilliseconds().toString(36) + name.hashCode().toString(36),
+                name = name, category = focus.label, color = accentHex, days = (0..6).toList(), start = today,
+            )
+        )
+    }
+    if (missing.isNotEmpty()) ui.toast("Added ${missing.size} habit(s).")
+}
+
+/** True only when a pending edit request should actually open the edit form. */
+internal fun shouldEnterEditMode(requested: Boolean, editingEnabled: Boolean): Boolean = requested && editingEnabled
+
+@Composable
+private fun ProfilePanel(store: AppStore, ui: UiState, today: LocalDate, p: UserProfile, editingEnabled: Boolean = PROFILE_EDITING_ENABLED) {
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember(editing) { mutableStateOf(p) }
+    val valid = isValidName(draft.name) && isValidHeightCm(draft.heightCm) && isValidWeightKg(draft.weightKg) &&
+        isValidSchedule(draft.wakeTime, draft.sleepTime)
+    val dirty = draft != p
+    val currentYear = today.year
+
+    LaunchedEffect(ui.profileEditRequested) {
+        if (ui.profileEditRequested) {
+            editing = shouldEnterEditMode(requested = true, editingEnabled = editingEnabled)
+            ui.profileEditRequested = false
+        }
+    }
+
+    Panel {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            H2("Profile", 20.sp)
+            if (editing) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DButton("Cancel", kind = BtnKind.Alt) {
+                        if (dirty) {
+                            ui.confirm = Confirm(
+                                "Discard changes?", "Discard", yesKind = BtnKind.Bad,
+                                cancelLabel = "Keep editing", cancelKind = BtnKind.Primary,
+                            ) { editing = false }
+                        } else editing = false
+                    }
+                    DButton("Save!", enabled = valid && dirty) {
+                        val focusChanged = draft.focus != p.focus
+                        val reminderChanged = draft.reminderTime != p.reminderTime
+                        val saved = draft
+                        store.updateProfile { saved }
+                        if (reminderChanged && saved.notificationsGranted) scheduleDailyReminder(saved.reminderTime.hour, saved.reminderTime.minute)
+                        editing = false
+                        ui.fireBurst("SAVED!")
+                        if (focusChanged) {
+                            ui.confirm = Confirm(
+                                "New focus! Add ${saved.focus.label} starter habits?", "Add", yesKind = BtnKind.Primary,
+                                cancelLabel = "No thanks", cancelKind = BtnKind.Alt,
+                            ) { addStarterHabits(store, ui, today, saved.focus, saved.accentHex) }
+                        }
+                    }
+                }
+            } else {
+                DButton("Edit", kind = BtnKind.Primary, enabled = editingEnabled) { if (editingEnabled) editing = true }
+            }
+        }
+        if (!editing && !editingEnabled) {
+            T(Copy.PROFILE_EDIT_PAUSED, 13.sp, color = LocalColors.current.muted, modifier = Modifier.padding(top = 4.dp))
+        }
+
+        if (!editing) {
+            ProfileInfoRow("Name", p.name)
+            ProfileInfoRow("Age", "${currentYear - p.birthYear} (born ${p.birthYear})")
+            ProfileInfoRow("Gender", fmtGender(p.gender))
+            ProfileInfoRow("Wake up", p.wakeTime.toString().take(5))
+            ProfileInfoRow("Sleep", p.sleepTime.toString().take(5))
+
+            val missing = STARTER_HABITS.getValue(p.focus).filter { name -> store.habits.none { h -> h.name == name } }
+            if (missing.isNotEmpty()) {
+                DButton("Add ${p.focus.label} starter habits", kind = BtnKind.Alt, modifier = Modifier.padding(top = 8.dp)) {
+                    addStarterHabits(store, ui, today, p.focus, p.accentHex)
+                }
+            }
+        } else {
+            FieldLabel("Name")
+            DField(draft.name, { n -> if (n.length <= 24) draft = draft.copy(name = n) }, maxLen = 24)
+
+            FieldLabel("Birth year")
+            WheelPicker(minBirthYear(currentYear)..maxBirthYear(currentYear), draft.birthYear, { y -> draft = draft.copy(birthYear = y) })
+
+            TilePicker(UnitSystem.entries, draft.unitSystem, { u -> draft = draft.copy(unitSystem = u) }, Modifier.padding(top = 8.dp)) { u, sel ->
+                T(if (u == UnitSystem.METRIC) "Metric (cm/kg)" else "Imperial (ft/lb)", weight = if (sel) FontWeight.Bold else FontWeight.Normal)
+            }
+
+            FieldLabel("Height (cm)")
+            WheelPicker(100..250, draft.heightCm.toInt(), { h -> draft = draft.copy(heightCm = h.toFloat()) }) { "$it cm" }
+
+            FieldLabel("Weight (kg)")
+            WheelPicker(30..300, draft.weightKg.toInt(), { w -> draft = draft.copy(weightKg = w.toFloat()) }) { "$it kg" }
+
+            FieldLabel("Activity level")
+            TilePicker(ActivityLevel.entries, draft.activityLevel, { lvl -> draft = draft.copy(activityLevel = lvl) }) { lvl, sel ->
+                T(Copy.ACTIVITY_COPY.getValue(lvl.name), weight = if (sel) FontWeight.Bold else FontWeight.Normal)
+            }
+
+            FieldLabel("Wake up")
+            TimeWheelPicker(draft.wakeTime, { t -> draft = draft.copy(wakeTime = t) })
+            FieldLabel("Sleep")
+            TimeWheelPicker(draft.sleepTime, { t -> draft = draft.copy(sleepTime = t) })
+            if (draft.wakeTime == draft.sleepTime) ErrText("Wake and sleep times should differ.")
+            FieldLabel("Reminder time")
+            TimeWheelPicker(draft.reminderTime, { t -> draft = draft.copy(reminderTime = t) })
+
+            FieldLabel("Avatar")
+            TilePicker(AVATARS, AVATARS.firstOrNull { it.id == draft.avatarId } ?: AVATARS.first(), { a -> draft = draft.copy(avatarId = a.id) }) { a, _ ->
+                Image(painterResource(a.drawable), contentDescription = a.id, modifier = Modifier.size(32.dp))
+            }
+
+            FieldLabel("Accent color")
+            TilePicker(PAL, PAL.firstOrNull { it.first == draft.accentHex } ?: PAL.first(), { c -> draft = draft.copy(accentHex = c.first) }) { (hexStr, name), _ ->
+                Box(Modifier.size(28.dp).background(hex(hexStr), CircleShape).semantics { contentDescription = name })
+            }
+
+            FieldLabel("Main focus")
+            TilePicker(Focus.entries, draft.focus, { f -> draft = draft.copy(focus = f) }) { f, sel ->
+                T(f.label, weight = if (sel) FontWeight.Bold else FontWeight.Normal)
+            }
+
+            FieldLabel("Notifications")
+            if (draft.notificationsGranted) {
+                T("ON")
+            } else {
+                val requestPermission = com.dotday.app.platform.rememberNotificationPermissionRequester()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    T("OFF", modifier = Modifier.padding(end = 8.dp))
+                    DButton("Allow reminders", kind = BtnKind.Alt) {
+                        requestPermission { granted -> draft = draft.copy(notificationsGranted = granted) }
+                    }
+                }
             }
         }
     }
